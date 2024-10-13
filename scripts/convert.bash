@@ -8,6 +8,34 @@ RED='\033[0;31m'
 
 IFS=$'\n'
 
+
+# auto install dependencies
+if ! pip install markdown2 pdfkit 2> /dev/null; then
+    echo -e "${RED}pip installation failed! Run pip install markdown2 pdfkit to see details.${REGULAR}"
+    exit 1
+fi
+
+whereis_wkhtmltopdf=$(whereis wkhtmltopdf)
+
+if [[ $? == 1 ]]; then
+    if [ -f /etc/debian_version ]; then
+        # Debian/Ubuntu
+        sudo apt update -y
+        sudo apt install wkhtmltopdf -y
+    elif [ -f /etc/arch-release ]; then
+        # Arch Linux
+        sudo pacman -Syu --noconfirm wkhtmltopdf
+    elif [ -f /etc/fedora-release ]; then
+        # Fedora
+        sudo dnf install wkhtmltopdf -y
+    else
+        echo -e "${RED}Unsupported Linux distribution.${REGULAR}"
+        exit 1
+    fi
+else
+    echo "Requirement already satisfied: $whereis_wkhtmltopdf"
+fi
+
 # Check if the current directory is valid for building the project
 if [[ -e .root || ! -d ../build ]]; then
     echo -e "${RED}You cannot build this project under this directory!${REGULAR}"
@@ -60,7 +88,14 @@ mkdir -p pdf
 # Process each markdown file
 for FILE in "${ALL_MARKDOWN_FILES[@]}"; do
     echo -ne "${GREEN}[$(current_percentage $CURRENT_FILE $FILE_COUNT)]:\t${BOLD}Converting file: $FILE <"
-    "$SOURCE_ROOT_DIR/scripts/convert.py" "$FILE" "$PWD/pdf/$(generate_pdf_filename_from_path "$FILE")"
+
+    if ! "$SOURCE_ROOT_DIR/scripts/convert.py" "$FILE" "$PWD/pdf/$(generate_pdf_filename_from_path "$FILE")"; then
+        echo -e "${RED}Conversion failed!${REGULAR}"
+        exit 1
+    fi
+
     echo -e ">${REGULAR}"
     ((CURRENT_FILE++))  # Increment the file counter
 done
+
+echo -e "${GREEN}${BOLD}Build Completed!${REGULAR}"
