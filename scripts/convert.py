@@ -1,46 +1,68 @@
 #!/usr/bin/env python3
 
-import markdown2
-import pdfkit
-import sys
+
 import threading
 import time
+import os
+import pypandoc
+import sys
+from pandocfilters import toJSONFilter, RawBlock, Header
 
 
 def my_thread_function():
+    """Thread function to print progress dots."""
     while True:
         print(".", end="", flush=True)
         time.sleep(0.1)
 
 
-def convert_markdown_to_pdf(md_file_path, output_pdf_path):
-    # Read the markdown file
-    with open(md_file_path, 'r', encoding='utf-8') as md_file:
-        markdown_content = md_file.read()
-
-    # Convert markdown to HTML
-    html_content = markdown2.markdown(markdown_content)
-
-    # Convert HTML to PDF
-    pdfkit.from_string(html_content, output_pdf_path)
+def add_pagebreak(key, value, format, meta):
+    if key == 'Header':
+        level, _, _ = value
+        # Check if header level is 1
+        if level == 1:
+            # Insert raw LaTeX newpage before the header
+            return [RawBlock('latex', '\\newpage'), Header(*value)]
 
 
 def main():
+    """Main function to manage file conversion."""
+
+    # Check if the right number of arguments were provided
+    if len(sys.argv) < 4:
+        print(f"Usage: {sys.argv[0]} <INPUT FILE> <OUTPUT FILE> <REFERENCES>")
+        sys.exit(0)
+
+    # Get arguments
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+    bibliography = sys.argv[3]
+
+    print(f"Converting {os.path.basename(input_file)} to {os.path.basename(output_file)}")
+
+    script_path = os.path.abspath(__file__)
+
+    # Extract the directory from the script path
+    script_dir = os.path.dirname(script_path)
+    docfilter = "--filter=" + script_dir + '/pagebreak_filter.py'
+    reference = "--bibliography=" + bibliography
+    csl = "--csl=" + script_dir + "/chicago-fullnote-bibliography.csl"
     my_thread = threading.Thread(target=my_thread_function, daemon=True)
     my_thread.start()
 
-    # Check if the right number of arguments were provided
-    if len(sys.argv) < 3:
-        print("Usage: ", sys.argv[0], " <INPUT FILE> <OUTPUT FILE>")
-        sys.exit(0)
-
-    # Get argv[1] and argv[2]
-    arg1 = sys.argv[1]
-    arg2 = sys.argv[2]
-
-    convert_markdown_to_pdf(arg1, arg2)
+    pypandoc.convert_file(
+        input_file,
+        'pdf',
+        outputfile=output_file,
+        extra_args=[docfilter,
+                    "-V", "geometry:margin=0.5in",
+                    "-f", "markdown+smart",
+                    reference,
+                    csl,
+                    "--citeproc"]
+    )
 
 
 if __name__ == "__main__":
     main()
-
+    print("done")
